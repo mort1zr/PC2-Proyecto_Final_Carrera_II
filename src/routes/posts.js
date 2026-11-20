@@ -100,6 +100,34 @@ module.exports = function postsRouter({ pool }) {
     }
   });
 
+  // PPCII-21 · Consultar historial de entregas (recolecciones completadas del generador)
+  router.get('/history', auth, generator, async (req, res, next) => {
+    try {
+      const { material } = req.query;
+      if (material !== undefined && !config.materials.includes(material)) {
+        return res.status(400).json({ error: 'Material inválido', allowed: config.materials });
+      }
+      const rows = await pool.query(
+        `SELECT id, material, quantity, completed_at FROM posts
+         WHERE generator_id = $1 AND status = 'Completada' ORDER BY completed_at DESC`,
+        [req.user.id]
+      );
+      const history = rows.rows;
+      const totals = {};
+      history.forEach((h) => {
+        totals[h.material] = (totals[h.material] || 0) + 1;
+      });
+      const filtered = material ? history.filter((h) => h.material === material) : history;
+      return res.json({
+        history: filtered,
+        total: filtered.length,
+        totals_by_material: totals,
+      });
+    } catch (err) {
+      return next(err);
+    }
+  });
+
   // PPCII-19 · Cancelar publicación de residuos (solo el generador y solo si sigue Disponible)
   router.post('/:id/cancel', auth, generator, async (req, res, next) => {
     try {

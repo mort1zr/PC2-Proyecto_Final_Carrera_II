@@ -13,6 +13,7 @@ import MyPosts from './pages/MyPosts.jsx';
 import Available from './pages/Available.jsx';
 import Assigned from './pages/Assigned.jsx';
 import Notifications from './pages/Notifications.jsx';
+import History from './pages/History.jsx';
 
 function Protected({ children }) {
   const { user, loading } = useAuth();
@@ -90,6 +91,7 @@ export default function App() {
           <Route path="/disponibles" element={<Protected><Available /></Protected>} />
           <Route path="/mis-recolecciones" element={<Protected><Assigned /></Protected>} />
           <Route path="/notificaciones" element={<Protected><Notifications /></Protected>} />
+          <Route path="/historial" element={<Protected><History /></Protected>} />
           <Route path="/mis-puntos" element={<Protected><MyPoints /></Protected>} />
           <Route path="/perfil" element={<Protected><Profile /></Protected>} />
           <Route path="*" element={<Navigate to="/" replace />} />
