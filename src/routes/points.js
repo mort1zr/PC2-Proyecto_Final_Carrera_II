@@ -92,7 +92,15 @@ module.exports = function pointsRouter({ pool, clock = () => new Date() }) {
   // PPCII-12 · Consultar lista de puntos de acopio (consulta pública)
   router.get('/', async (req, res, next) => {
     try {
-      const points = await loadPoints(pool, clock());
+      const { material } = req.query;
+      if (material !== undefined && !config.materials.includes(material)) {
+        return res.status(400).json({ error: 'Material inválido', allowed: config.materials });
+      }
+      let points = await loadPoints(pool, clock());
+      // PPCII-14 · Filtrar puntos de acopio por tipo de material
+      if (material) {
+        points = points.filter((p) => p.materials.includes(material));
+      }
       return res.json({ points });
     } catch (err) {
       return next(err);
