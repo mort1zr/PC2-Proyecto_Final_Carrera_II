@@ -3,6 +3,7 @@ import { useAuth } from '../auth.jsx';
 
 const ACTIONS = {
   generator: [
+    { to: '/mis-publicaciones', title: 'Mis publicaciones', text: 'Publica tus residuos reciclables y sigue su estado.' },
     { to: '/puntos', title: 'Puntos de acopio', text: 'Encuentra dónde entregar tu reciclaje.' },
     { to: '/mapa', title: 'Mapa', text: 'Mira los puntos cercanos a ti.' },
   ],
