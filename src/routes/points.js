@@ -1,5 +1,6 @@
 const express = require('express');
 const { z } = require('zod');
+const config = require('../config');
 const { validate } = require('../validate');
 const { requireAuth, requireRole } = require('../middleware/auth');
 
@@ -10,10 +11,101 @@ const pointSchema = z.object({
   lng: z.coerce.number({ message: 'Longitud inválida' }).min(-180).max(180),
 });
 
-module.exports = function pointsRouter({ pool }) {
+const timeRegex = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+const detailsSchema = z
+  .object({
+    materials: z
+      .array(z.enum(config.materials, { message: 'Material inválido' }))
+      .min(1, 'Selecciona al menos un material'),
+    hours: z
+      .array(
+        z.object({
+          day: z.number().int().min(0).max(6),
+          open: z.string().regex(timeRegex, 'Hora de apertura inválida (HH:MM)'),
+          close: z.string().regex(timeRegex, 'Hora de cierre inválida (HH:MM)'),
+        })
+      )
+      .min(1, 'Indica al menos un horario'),
+  })
+  .superRefine((data, ctx) => {
+    data.hours.forEach((h, i) => {
+      if (h.open >= h.close) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['hours', i, 'close'],
+          message: 'El horario de cierre debe ser posterior al de apertura',
+        });
+      }
+    });
+  })
+  .transform((data) => ({ ...data, materials: [...new Set(data.materials)] }));
+
+/** Día de la semana (0 = domingo) y hora HH:MM actuales en Lima. */
+function limaNow(date) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Lima',
+    weekday: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(date);
+  const get = (type) => parts.find((p) => p.type === type).value;
+  const days = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+  return { day: days[get('weekday')], time: `${get('hour')}:${get('minute')}` };
+}
+
+function isOpenNow(hours, date) {
+  const { day, time } = limaNow(date);
+  return hours.some((h) => h.day === day && h.open <= time && time < h.close);
+}
+
+/** Puntos activos con materiales, horarios y estado abierto/cerrado. */
+async function loadPoints(pool, now) {
+  const points = (
+    await pool.query(
+      'SELECT id, name, address, lat, lng FROM collection_points WHERE active = true ORDER BY id'
+    )
+  ).rows;
+  const materialRows = (await pool.query('SELECT point_id, material FROM point_materials')).rows;
+  const hourRows = (
+    await pool.query('SELECT point_id, day, open_time, close_time FROM point_hours ORDER BY day')
+  ).rows;
+  return points.map((p) => {
+    const hours = hourRows
+      .filter((h) => h.point_id === p.id)
+      .map((h) => ({ day: h.day, open: h.open_time, close: h.close_time }));
+    return {
+      ...p,
+      materials: materialRows.filter((m) => m.point_id === p.id).map((m) => m.material),
+      hours,
+      open_now: isOpenNow(hours, now),
+    };
+  });
+}
+
+module.exports = function pointsRouter({ pool, clock = () => new Date() }) {
   const router = express.Router();
   const auth = requireAuth(pool);
   const pointAdmin = requireRole('point_admin');
+
+  // PPCII-12 · Consultar lista de puntos de acopio (consulta pública)
+  router.get('/', async (req, res, next) => {
+    try {
+      const { material } = req.query;
+      if (material !== undefined && !config.materials.includes(material)) {
+        return res.status(400).json({ error: 'Material inválido', allowed: config.materials });
+      }
+      let points = await loadPoints(pool, clock());
+      // PPCII-14 · Filtrar puntos de acopio por tipo de material
+      if (material) {
+        points = points.filter((p) => p.materials.includes(material));
+      }
+      return res.json({ points });
+    } catch (err) {
+      return next(err);
+    }
+  });
 
   // PPCII-10 · Registrar punto de acopio
   router.post('/', auth, pointAdmin, validate(pointSchema), async (req, res, next) => {
@@ -24,6 +116,38 @@ module.exports = function pointsRouter({ pool }) {
         [req.user.id, name, address, lat, lng]
       );
       return res.status(201).json(created.rows[0]);
+    } catch (err) {
+      return next(err);
+    }
+  });
+
+  // PPCII-11 · Definir materiales y horarios de un punto de acopio
+  router.put('/:id/details', auth, pointAdmin, validate(detailsSchema), async (req, res, next) => {
+    try {
+      const pointId = Number(req.params.id);
+      if (!Number.isInteger(pointId)) {
+        return res.status(400).json({ error: 'Identificador inválido' });
+      }
+      const point = await pool.query('SELECT id, owner_id FROM collection_points WHERE id = $1', [pointId]);
+      if (point.rows.length === 0) {
+        return res.status(404).json({ error: 'Punto de acopio no encontrado' });
+      }
+      if (point.rows[0].owner_id !== req.user.id) {
+        return res.status(403).json({ error: 'Solo el propietario puede modificar el punto' });
+      }
+      const { materials, hours } = req.body;
+      await pool.query('DELETE FROM point_materials WHERE point_id = $1', [pointId]);
+      await pool.query('DELETE FROM point_hours WHERE point_id = $1', [pointId]);
+      for (const material of materials) {
+        await pool.query('INSERT INTO point_materials (point_id, material) VALUES ($1, $2)', [pointId, material]);
+      }
+      for (const h of hours) {
+        await pool.query(
+          'INSERT INTO point_hours (point_id, day, open_time, close_time) VALUES ($1, $2, $3, $4)',
+          [pointId, h.day, h.open, h.close]
+        );
+      }
+      return res.json({ id: pointId, materials, hours });
     } catch (err) {
       return next(err);
     }

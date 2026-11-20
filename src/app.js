@@ -5,9 +5,12 @@ const rateLimit = require('express-rate-limit');
 const authRouter = require('./routes/auth');
 const usersRouter = require('./routes/users');
 const pointsRouter = require('./routes/points');
+const postsRouter = require('./routes/posts');
+const { notificationsRouter } = require('./routes/notifications');
+const { adminRouter } = require('./routes/admin');
 
 /** Construye la aplicación Express con un pool de base de datos inyectado. */
-function createApp({ pool, rateLimitMax = 100 } = {}) {
+function createApp({ pool, rateLimitMax = 100, clock } = {}) {
   const app = express();
   app.disable('x-powered-by');
   app.use(helmet());
@@ -21,7 +24,10 @@ function createApp({ pool, rateLimitMax = 100 } = {}) {
   app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
   app.use('/api/auth', authRouter({ pool }));
   app.use('/api/users', usersRouter({ pool }));
-  app.use('/api/points', pointsRouter({ pool }));
+  app.use('/api/points', pointsRouter({ pool, clock }));
+  app.use('/api/posts', postsRouter({ pool }));
+  app.use('/api/notifications', notificationsRouter({ pool }));
+  app.use('/api/admin', adminRouter({ pool }));
 
   app.use('/api', (req, res) => res.status(404).json({ error: 'Ruta no encontrada' }));
 

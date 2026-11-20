@@ -12,7 +12,7 @@ function createPool() {
   return new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: process.env.DATABASE_SSL === 'false' ? false : { rejectUnauthorized: false },
-    max: 5,
+    max: process.env.VERCEL ? 1 : 5,
   });
 }
 
