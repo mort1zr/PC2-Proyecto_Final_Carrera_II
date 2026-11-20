@@ -41,10 +41,63 @@ const detailsSchema = z
   })
   .transform((data) => ({ ...data, materials: [...new Set(data.materials)] }));
 
-module.exports = function pointsRouter({ pool }) {
+/** Día de la semana (0 = domingo) y hora HH:MM actuales en Lima. */
+function limaNow(date) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Lima',
+    weekday: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(date);
+  const get = (type) => parts.find((p) => p.type === type).value;
+  const days = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+  return { day: days[get('weekday')], time: `${get('hour')}:${get('minute')}` };
+}
+
+function isOpenNow(hours, date) {
+  const { day, time } = limaNow(date);
+  return hours.some((h) => h.day === day && h.open <= time && time < h.close);
+}
+
+/** Puntos activos con materiales, horarios y estado abierto/cerrado. */
+async function loadPoints(pool, now) {
+  const points = (
+    await pool.query(
+      'SELECT id, name, address, lat, lng FROM collection_points WHERE active = true ORDER BY id'
+    )
+  ).rows;
+  const materialRows = (await pool.query('SELECT point_id, material FROM point_materials')).rows;
+  const hourRows = (
+    await pool.query('SELECT point_id, day, open_time, close_time FROM point_hours ORDER BY day')
+  ).rows;
+  return points.map((p) => {
+    const hours = hourRows
+      .filter((h) => h.point_id === p.id)
+      .map((h) => ({ day: h.day, open: h.open_time, close: h.close_time }));
+    return {
+      ...p,
+      materials: materialRows.filter((m) => m.point_id === p.id).map((m) => m.material),
+      hours,
+      open_now: isOpenNow(hours, now),
+    };
+  });
+}
+
+module.exports = function pointsRouter({ pool, clock = () => new Date() }) {
   const router = express.Router();
   const auth = requireAuth(pool);
   const pointAdmin = requireRole('point_admin');
+
+  // PPCII-12 · Consultar lista de puntos de acopio (consulta pública)
+  router.get('/', async (req, res, next) => {
+    try {
+      const points = await loadPoints(pool, clock());
+      return res.json({ points });
+    } catch (err) {
+      return next(err);
+    }
+  });
 
   // PPCII-10 · Registrar punto de acopio
   router.post('/', auth, pointAdmin, validate(pointSchema), async (req, res, next) => {

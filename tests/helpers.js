@@ -4,12 +4,12 @@ const { createApp } = require('../src/app');
 const { initSchema } = require('../src/db');
 
 /** Crea una app con una base de datos PostgreSQL en memoria. */
-async function buildTestApp() {
+async function buildTestApp({ clock } = {}) {
   const db = newDb();
   const { Pool } = db.adapters.createPg();
   const pool = new Pool();
   await initSchema(pool);
-  const app = createApp({ pool, rateLimitMax: 10000 });
+  const app = createApp({ pool, rateLimitMax: 10000, clock });
   return { app, pool, request: request(app) };
 }
 
