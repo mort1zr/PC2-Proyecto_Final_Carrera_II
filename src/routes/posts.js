@@ -75,5 +75,43 @@ module.exports = function postsRouter({ pool }) {
     }
   });
 
+  // PPCII-17 · Aceptar solicitud de recolección (atómico: solo si sigue Disponible)
+  router.post('/:id/accept', auth, collector, async (req, res, next) => {
+    try {
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id)) return res.status(400).json({ error: 'Identificador inválido' });
+      const updated = await pool.query(
+        `UPDATE posts SET status = 'Aceptada', collector_id = $1
+         WHERE id = $2 AND status = 'Disponible'
+         RETURNING id, material, quantity, address, zone, pickup_time, status, collector_id, generator_id`,
+        [req.user.id, id]
+      );
+      if (updated.rows.length === 0) {
+        const exists = await pool.query('SELECT id FROM posts WHERE id = $1', [id]);
+        if (exists.rows.length === 0) return res.status(404).json({ error: 'Publicación no encontrada' });
+        return res.status(409).json({ error: 'La publicación ya no está disponible' });
+      }
+      const { generator_id: generatorId, ...post } = updated.rows[0];
+      return res.json(post);
+    } catch (err) {
+      return next(err);
+    }
+  });
+
+  // Publicaciones aceptadas por el recolector autenticado
+  router.get('/assigned', auth, collector, async (req, res, next) => {
+    try {
+      const rows = await pool.query(
+        `SELECT p.id, p.material, p.quantity, p.address, p.zone, p.pickup_time, p.status, p.completed_at, g.name AS generator_name, g.phone AS generator_phone
+         FROM posts p JOIN users g ON g.id = p.generator_id
+         WHERE p.collector_id = $1 ORDER BY p.id DESC`,
+        [req.user.id]
+      );
+      return res.json({ posts: rows.rows });
+    } catch (err) {
+      return next(err);
+    }
+  });
+
   return router;
 };
