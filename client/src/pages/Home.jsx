@@ -8,6 +8,7 @@ const ACTIONS = {
     { to: '/mapa', title: 'Mapa', text: 'Mira los puntos cercanos a ti.' },
   ],
   collector: [
+    { to: '/disponibles', title: 'Residuos disponibles', text: 'Mira dónde hay material para recolectar.' },
     { to: '/puntos', title: 'Puntos de acopio', text: 'Consulta los puntos de entrega de la zona.' },
     { to: '/mapa', title: 'Mapa', text: 'Ubica los puntos en el mapa.' },
   ],

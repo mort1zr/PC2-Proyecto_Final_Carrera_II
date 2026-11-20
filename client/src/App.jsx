@@ -9,6 +9,7 @@ import Points from './pages/Points.jsx';
 import MyPoints from './pages/MyPoints.jsx';
 import MapView from './pages/MapView.jsx';
 import MyPosts from './pages/MyPosts.jsx';
+import Available from './pages/Available.jsx';
 
 function Protected({ children }) {
   const { user, loading } = useAuth();
@@ -65,6 +66,7 @@ export default function App() {
           <Route path="/puntos" element={<Protected><Points /></Protected>} />
           <Route path="/mapa" element={<Protected><MapView /></Protected>} />
           <Route path="/mis-publicaciones" element={<Protected><MyPosts /></Protected>} />
+          <Route path="/disponibles" element={<Protected><Available /></Protected>} />
           <Route path="/mis-puntos" element={<Protected><MyPoints /></Protected>} />
           <Route path="/perfil" element={<Protected><Profile /></Protected>} />
           <Route path="*" element={<Navigate to="/" replace />} />

@@ -19,6 +19,7 @@ module.exports = function postsRouter({ pool }) {
   const router = express.Router();
   const auth = requireAuth(pool);
   const generator = requireRole('generator');
+  const collector = requireRole('collector');
 
   // PPCII-15 · Publicar residuos reciclables disponibles
   router.post('/', auth, generator, validate(postSchema), async (req, res, next) => {
@@ -43,6 +44,30 @@ module.exports = function postsRouter({ pool }) {
         `SELECT ${COLUMNS} FROM posts p LEFT JOIN users u ON u.id = p.collector_id
          WHERE p.generator_id = $1 ORDER BY p.id DESC`,
         [req.user.id]
+      );
+      return res.json({ posts: rows.rows });
+    } catch (err) {
+      return next(err);
+    }
+  });
+
+  // PPCII-16 · Consultar residuos disponibles para recolección
+  router.get('/available', auth, collector, async (req, res, next) => {
+    try {
+      const { material } = req.query;
+      if (material !== undefined && !config.materials.includes(material)) {
+        return res.status(400).json({ error: 'Material inválido', allowed: config.materials });
+      }
+      const params = [];
+      let filter = '';
+      if (material) {
+        params.push(material);
+        filter = ' AND p.material = $1';
+      }
+      const rows = await pool.query(
+        `SELECT p.id, p.material, p.quantity, p.address, p.zone, p.pickup_time, p.created_at
+         FROM posts p WHERE p.status = 'Disponible'${filter} ORDER BY p.id DESC`,
+        params
       );
       return res.json({ posts: rows.rows });
     } catch (err) {
