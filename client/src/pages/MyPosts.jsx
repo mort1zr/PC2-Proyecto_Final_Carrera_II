@@ -27,6 +27,18 @@ export default function MyPosts() {
   };
   const set = (field) => (e) => setForm({ ...form, [field]: e.target.value });
 
+  const cancel = async (id) => {
+    setError('');
+    setMessage('');
+    try {
+      await api(`/posts/${id}/cancel`, { method: 'POST' });
+      setMessage('Publicación cancelada');
+    } catch (err) {
+      setError(err.message);
+    }
+    load();
+  };
+
   return (
     <section>
       <h1>Mis publicaciones</h1>
@@ -61,6 +73,9 @@ export default function MyPosts() {
             <p>{p.address}{p.zone ? ` (${p.zone})` : ''}</p>
             <p className="muted">Recojo: {p.pickup_time}</p>
             {p.collector_name && <p>Recolector asignado: <strong>{p.collector_name}</strong></p>}
+            {p.status === 'Disponible' && (
+              <button className="secondary" onClick={() => cancel(p.id)}>Cancelar publicación</button>
+            )}
           </article>
         ))}
       </div>

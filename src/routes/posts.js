@@ -98,6 +98,37 @@ module.exports = function postsRouter({ pool }) {
     }
   });
 
+  // PPCII-19 · Cancelar publicación de residuos (solo el generador y solo si sigue Disponible)
+  router.post('/:id/cancel', auth, generator, async (req, res, next) => {
+    try {
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id)) return res.status(400).json({ error: 'Identificador inválido' });
+      const found = await pool.query('SELECT id, status, generator_id FROM posts WHERE id = $1', [id]);
+      const post = found.rows[0];
+      if (!post) return res.status(404).json({ error: 'Publicación no encontrada' });
+      if (post.generator_id !== req.user.id) {
+        return res.status(403).json({ error: 'Solo el autor puede cancelar la publicación' });
+      }
+      if (post.status !== 'Disponible') {
+        const reason =
+          post.status === 'Completada'
+            ? 'No se puede cancelar una publicación completada'
+            : `No se puede cancelar una publicación en estado ${post.status}`;
+        return res.status(409).json({ error: reason });
+      }
+      const updated = await pool.query(
+        `UPDATE posts SET status = 'Cancelada' WHERE id = $1 AND status = 'Disponible' RETURNING id, status`,
+        [id]
+      );
+      if (updated.rows.length === 0) {
+        return res.status(409).json({ error: 'La publicación ya no se puede cancelar' });
+      }
+      return res.json(updated.rows[0]);
+    } catch (err) {
+      return next(err);
+    }
+  });
+
   // PPCII-18 · Confirmar recolección completada
   router.post('/:id/complete', auth, collector, async (req, res, next) => {
     try {
