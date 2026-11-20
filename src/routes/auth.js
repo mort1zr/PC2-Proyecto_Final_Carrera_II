@@ -51,6 +51,16 @@ module.exports = function authRouter({ pool }) {
     }
   });
 
+  // PPCII-8 · Cerrar sesión: invalida la sesión activa en el servidor
+  router.post('/logout', auth, async (req, res, next) => {
+    try {
+      await pool.query('DELETE FROM sessions WHERE id = $1', [req.sessionId]);
+      return res.json({ message: 'Sesión cerrada' });
+    } catch (err) {
+      return next(err);
+    }
+  });
+
   // Usuario autenticado actual (ruta protegida)
   router.get('/me', auth, (req, res) => res.json({ user: req.user }));
 
