@@ -98,6 +98,35 @@ module.exports = function postsRouter({ pool }) {
     }
   });
 
+  // PPCII-18 · Confirmar recolección completada
+  router.post('/:id/complete', auth, collector, async (req, res, next) => {
+    try {
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id)) return res.status(400).json({ error: 'Identificador inválido' });
+      const found = await pool.query('SELECT id, status, collector_id FROM posts WHERE id = $1', [id]);
+      const post = found.rows[0];
+      if (!post) return res.status(404).json({ error: 'Publicación no encontrada' });
+      if (post.collector_id !== req.user.id) {
+        return res.status(403).json({ error: 'La publicación no está asignada a ti' });
+      }
+      if (post.status === 'Completada') {
+        return res.status(409).json({ error: 'La publicación ya está completada y no admite cambios' });
+      }
+      if (post.status !== 'Aceptada') {
+        return res.status(409).json({ error: 'Solo se pueden completar publicaciones aceptadas' });
+      }
+      const updated = await pool.query(
+        `UPDATE posts SET status = 'Completada', completed_at = now()
+         WHERE id = $1 AND status = 'Aceptada'
+         RETURNING id, material, quantity, status, completed_at`,
+        [id]
+      );
+      return res.json(updated.rows[0]);
+    } catch (err) {
+      return next(err);
+    }
+  });
+
   // Publicaciones aceptadas por el recolector autenticado
   router.get('/assigned', auth, collector, async (req, res, next) => {
     try {
