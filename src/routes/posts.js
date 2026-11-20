@@ -3,6 +3,7 @@ const { z } = require('zod');
 const config = require('../config');
 const { validate } = require('../validate');
 const { requireAuth, requireRole } = require('../middleware/auth');
+const { notify } = require('./notifications');
 
 const postSchema = z.object({
   material: z.enum(config.materials, { message: 'Material inválido' }),
@@ -92,6 +93,7 @@ module.exports = function postsRouter({ pool }) {
         return res.status(409).json({ error: 'La publicación ya no está disponible' });
       }
       const { generator_id: generatorId, ...post } = updated.rows[0];
+      await notify(pool, generatorId, `Tu publicación de ${post.material} fue aceptada por ${req.user.name}`);
       return res.json(post);
     } catch (err) {
       return next(err);
@@ -134,7 +136,10 @@ module.exports = function postsRouter({ pool }) {
     try {
       const id = Number(req.params.id);
       if (!Number.isInteger(id)) return res.status(400).json({ error: 'Identificador inválido' });
-      const found = await pool.query('SELECT id, status, collector_id FROM posts WHERE id = $1', [id]);
+      const found = await pool.query(
+        'SELECT id, status, collector_id, generator_id, material FROM posts WHERE id = $1',
+        [id]
+      );
       const post = found.rows[0];
       if (!post) return res.status(404).json({ error: 'Publicación no encontrada' });
       if (post.collector_id !== req.user.id) {
@@ -152,6 +157,7 @@ module.exports = function postsRouter({ pool }) {
          RETURNING id, material, quantity, status, completed_at`,
         [id]
       );
+      await notify(pool, post.generator_id, `El retiro de tu publicación de ${post.material} fue completado`);
       return res.json(updated.rows[0]);
     } catch (err) {
       return next(err);

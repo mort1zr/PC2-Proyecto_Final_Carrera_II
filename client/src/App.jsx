@@ -1,6 +1,7 @@
+import { useEffect, useState } from 'react';
 import { Link, NavLink, Navigate, Route, Routes, useNavigate } from 'react-router-dom';
 import { useAuth } from './auth.jsx';
-import { ROLE_LABELS } from './api.js';
+import { api, ROLE_LABELS } from './api.js';
 import Login from './pages/Login.jsx';
 import Register from './pages/Register.jsx';
 import Profile from './pages/Profile.jsx';
@@ -11,6 +12,7 @@ import MapView from './pages/MapView.jsx';
 import MyPosts from './pages/MyPosts.jsx';
 import Available from './pages/Available.jsx';
 import Assigned from './pages/Assigned.jsx';
+import Notifications from './pages/Notifications.jsx';
 
 function Protected({ children }) {
   const { user, loading } = useAuth();
@@ -19,8 +21,25 @@ function Protected({ children }) {
   return children;
 }
 
+function useUnread(user) {
+  const [unread, setUnread] = useState(0);
+  useEffect(() => {
+    if (!user) return undefined;
+    const refresh = () => api('/notifications').then((d) => setUnread(d.unread)).catch(() => {});
+    refresh();
+    window.addEventListener('notifications-changed', refresh);
+    const timer = setInterval(refresh, 30000);
+    return () => {
+      window.removeEventListener('notifications-changed', refresh);
+      clearInterval(timer);
+    };
+  }, [user]);
+  return unread;
+}
+
 function Header() {
   const { user, logout } = useAuth();
+  const unread = useUnread(user);
   const navigate = useNavigate();
   const onLogout = async () => {
     await logout();
@@ -37,6 +56,7 @@ function Header() {
             <NavLink to="/">Inicio</NavLink>
             <NavLink to="/puntos">Puntos de acopio</NavLink>
             <NavLink to="/mapa">Mapa</NavLink>
+            <NavLink to="/notificaciones">Notificaciones{unread > 0 ? ` (${unread})` : ''}</NavLink>
             <NavLink to="/perfil">Mi perfil</NavLink>
             <span className="chip">{ROLE_LABELS[user.role]}</span>
             <button className="link" onClick={onLogout}>
@@ -69,6 +89,7 @@ export default function App() {
           <Route path="/mis-publicaciones" element={<Protected><MyPosts /></Protected>} />
           <Route path="/disponibles" element={<Protected><Available /></Protected>} />
           <Route path="/mis-recolecciones" element={<Protected><Assigned /></Protected>} />
+          <Route path="/notificaciones" element={<Protected><Notifications /></Protected>} />
           <Route path="/mis-puntos" element={<Protected><MyPoints /></Protected>} />
           <Route path="/perfil" element={<Protected><Profile /></Protected>} />
           <Route path="*" element={<Navigate to="/" replace />} />
