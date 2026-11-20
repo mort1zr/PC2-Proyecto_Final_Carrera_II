@@ -27,6 +27,18 @@ export default function MyPosts() {
   };
   const set = (field) => (e) => setForm({ ...form, [field]: e.target.value });
 
+  const rate = async (id, stars) => {
+    setError('');
+    setMessage('');
+    try {
+      const r = await api(`/posts/${id}/rate`, { method: 'POST', body: { stars } });
+      setMessage(`Gracias por calificar. Promedio del recolector: ${r.collector_average} ★`);
+    } catch (err) {
+      setError(err.message);
+    }
+    load();
+  };
+
   const cancel = async (id) => {
     setError('');
     setMessage('');
@@ -73,6 +85,19 @@ export default function MyPosts() {
             <p>{p.address}{p.zone ? ` (${p.zone})` : ''}</p>
             <p className="muted">Recojo: {p.pickup_time}</p>
             {p.collector_name && <p>Recolector asignado: <strong>{p.collector_name}</strong></p>}
+            {p.status === 'Completada' && (
+              p.my_rating ? (
+                <p>Tu calificación: {'★'.repeat(p.my_rating)}{'☆'.repeat(5 - p.my_rating)}</p>
+              ) : (
+                <label>
+                  Calificar al recolector
+                  <select defaultValue="" onChange={(e) => e.target.value && rate(p.id, Number(e.target.value))}>
+                    <option value="">Elige de 1 a 5 estrellas</option>
+                    {[5, 4, 3, 2, 1].map((n) => <option key={n} value={n}>{'★'.repeat(n)} ({n})</option>)}
+                  </select>
+                </label>
+              )
+            )}
             {p.status === 'Disponible' && (
               <button className="secondary" onClick={() => cancel(p.id)}>Cancelar publicación</button>
             )}

@@ -13,6 +13,10 @@ const postSchema = z.object({
   pickup_time: z.string().trim().min(1, 'El horario de recojo es obligatorio').max(100),
 });
 
+const ratingSchema = z.object({
+  stars: z.number({ message: 'La calificación debe ser un número' }).int().min(1, 'Mínimo 1 estrella').max(5, 'Máximo 5 estrellas'),
+});
+
 const COLUMNS =
   'p.id, p.material, p.quantity, p.address, p.zone, p.pickup_time, p.status, p.created_at, p.completed_at, p.collector_id, u.name AS collector_name';
 
@@ -46,7 +50,10 @@ module.exports = function postsRouter({ pool }) {
          WHERE p.generator_id = $1 ORDER BY p.id DESC`,
         [req.user.id]
       );
-      return res.json({ posts: rows.rows });
+      const rated = await pool.query('SELECT post_id, stars FROM ratings WHERE rater_id = $1', [req.user.id]);
+      const stars = new Map(rated.rows.map((r) => [r.post_id, r.stars]));
+      const posts = rows.rows.map((p) => ({ ...p, my_rating: stars.get(p.id) ?? null }));
+      return res.json({ posts });
     } catch (err) {
       return next(err);
     }
@@ -95,6 +102,40 @@ module.exports = function postsRouter({ pool }) {
       const { generator_id: generatorId, ...post } = updated.rows[0];
       await notify(pool, generatorId, `Tu publicación de ${post.material} fue aceptada por ${req.user.name}`);
       return res.json(post);
+    } catch (err) {
+      return next(err);
+    }
+  });
+
+  // PPCII-22 · Calificar al recolector tras una recolección completada
+  router.post('/:id/rate', auth, generator, validate(ratingSchema), async (req, res, next) => {
+    try {
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id)) return res.status(400).json({ error: 'Identificador inválido' });
+      const found = await pool.query(
+        'SELECT id, status, generator_id, collector_id FROM posts WHERE id = $1',
+        [id]
+      );
+      const post = found.rows[0];
+      if (!post) return res.status(404).json({ error: 'Publicación no encontrada' });
+      if (post.generator_id !== req.user.id) {
+        return res.status(403).json({ error: 'Solo el autor de la publicación puede calificar' });
+      }
+      if (post.status !== 'Completada') {
+        return res.status(409).json({ error: 'Solo se puede calificar una recolección completada' });
+      }
+      const already = await pool.query('SELECT id FROM ratings WHERE post_id = $1', [id]);
+      if (already.rows.length > 0) {
+        return res.status(409).json({ error: 'Ya calificaste esta recolección' });
+      }
+      await pool.query(
+        'INSERT INTO ratings (post_id, rater_id, collector_id, stars) VALUES ($1, $2, $3, $4)',
+        [id, req.user.id, post.collector_id, req.body.stars]
+      );
+      const all = await pool.query('SELECT stars FROM ratings WHERE collector_id = $1', [post.collector_id]);
+      const count = all.rows.length;
+      const average = Math.round((all.rows.reduce((sum, r) => sum + r.stars, 0) / count) * 100) / 100;
+      return res.status(201).json({ stars: req.body.stars, collector_average: average, collector_ratings: count });
     } catch (err) {
       return next(err);
     }
