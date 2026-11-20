@@ -4,6 +4,7 @@ const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 const authRouter = require('./routes/auth');
 const usersRouter = require('./routes/users');
+const pointsRouter = require('./routes/points');
 
 /** Construye la aplicación Express con un pool de base de datos inyectado. */
 function createApp({ pool, rateLimitMax = 100 } = {}) {
@@ -20,6 +21,7 @@ function createApp({ pool, rateLimitMax = 100 } = {}) {
   app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
   app.use('/api/auth', authRouter({ pool }));
   app.use('/api/users', usersRouter({ pool }));
+  app.use('/api/points', pointsRouter({ pool }));
 
   app.use('/api', (req, res) => res.status(404).json({ error: 'Ruta no encontrada' }));
 
