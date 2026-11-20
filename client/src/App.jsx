@@ -5,6 +5,8 @@ import Login from './pages/Login.jsx';
 import Register from './pages/Register.jsx';
 import Profile from './pages/Profile.jsx';
 import Home from './pages/Home.jsx';
+import Points from './pages/Points.jsx';
+import MyPoints from './pages/MyPoints.jsx';
 
 function Protected({ children }) {
   const { user, loading } = useAuth();
@@ -29,6 +31,7 @@ function Header() {
         {user && (
           <>
             <NavLink to="/">Inicio</NavLink>
+            <NavLink to="/puntos">Puntos de acopio</NavLink>
             <NavLink to="/perfil">Mi perfil</NavLink>
             <span className="chip">{ROLE_LABELS[user.role]}</span>
             <button className="link" onClick={onLogout}>
@@ -56,6 +59,8 @@ export default function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/registro" element={<Register />} />
           <Route path="/" element={<Protected><Home /></Protected>} />
+          <Route path="/puntos" element={<Protected><Points /></Protected>} />
+          <Route path="/mis-puntos" element={<Protected><MyPoints /></Protected>} />
           <Route path="/perfil" element={<Protected><Profile /></Protected>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
