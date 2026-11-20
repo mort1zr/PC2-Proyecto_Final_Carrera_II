@@ -1,0 +1,98 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main, test, 'claude/**']
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Etapa 1 y 2: build + pruebas automatizadas
+  build-test:
+    name: Build y pruebas
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Instalar dependencias del servidor
+        run: npm ci
+      - name: Pruebas del servidor (unitarias e integración)
+        run: npm test
+      - name: Build del cliente
+        run: |
+          if [ -d client ]; then
+            npm --prefix client ci
+            npm --prefix client run build
+          else
+            echo "Aún no hay cliente"
+          fi
+      - name: Publicar cobertura
+        uses: actions/upload-artifact@v4
+        with:
+          name: cobertura
+          path: coverage/
+
+  # Etapa 3a: análisis de dependencias (SCA)
+  dependency-audit:
+    name: Análisis de dependencias
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: npm audit (servidor)
+        run: npm audit --audit-level=high
+      - name: npm audit (cliente)
+        run: |
+          if [ -d client ]; then
+            npm --prefix client audit --audit-level=high
+          fi
+
+  # Etapa 3b: escaneo de secretos
+  secret-scan:
+    name: Escaneo de secretos
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Etapa 4: despliegue (solo en main y solo si los chequeos pasan)
+  deploy:
+    name: Despliegue en Vercel
+    needs: [build-test, dependency-audit, secret-scan]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Desplegar a producción
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "Falta el secreto VERCEL_TOKEN; se omite el despliegue"
+            exit 0
+          fi
+          npm install --global vercel@latest
+          vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+          vercel build --prod --token="$VERCEL_TOKEN"
+          vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"
