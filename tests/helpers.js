@@ -19,4 +19,13 @@ async function registerAndLogin(api, { email, role = 'generator', name = 'Usuari
   return { token: res.body.token, user: res.body.user };
 }
 
-module.exports = { buildTestApp, registerAndLogin };
+/** Crea un administrador de plataforma (el rol no se puede elegir al registrarse). */
+async function createAdminAndLogin(api, pool, email = 'admin@plataforma.com') {
+  const password = 'ClaveAdmin123';
+  await api.post('/api/auth/register').send({ name: 'Admin', email, password, role: 'generator' });
+  await pool.query("UPDATE users SET role = 'admin' WHERE email = $1", [email]);
+  const res = await api.post('/api/auth/login').send({ email, password });
+  return { token: res.body.token, user: res.body.user };
+}
+
+module.exports = { buildTestApp, registerAndLogin, createAdminAndLogin };

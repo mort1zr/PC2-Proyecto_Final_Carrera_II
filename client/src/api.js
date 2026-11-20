@@ -28,6 +28,7 @@ export const ROLE_LABELS = {
   generator: 'Generador de residuos',
   collector: 'Recolector',
   point_admin: 'Administrador de punto de acopio',
+  admin: 'Administrador de la plataforma',
 };
 
 export const MATERIAL_LABELS = {

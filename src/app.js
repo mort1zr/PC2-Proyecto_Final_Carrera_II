@@ -7,6 +7,7 @@ const usersRouter = require('./routes/users');
 const pointsRouter = require('./routes/points');
 const postsRouter = require('./routes/posts');
 const { notificationsRouter } = require('./routes/notifications');
+const { adminRouter } = require('./routes/admin');
 
 /** Construye la aplicación Express con un pool de base de datos inyectado. */
 function createApp({ pool, rateLimitMax = 100, clock } = {}) {
@@ -26,6 +27,7 @@ function createApp({ pool, rateLimitMax = 100, clock } = {}) {
   app.use('/api/points', pointsRouter({ pool, clock }));
   app.use('/api/posts', postsRouter({ pool }));
   app.use('/api/notifications', notificationsRouter({ pool }));
+  app.use('/api/admin', adminRouter({ pool }));
 
   app.use('/api', (req, res) => res.status(404).json({ error: 'Ruta no encontrada' }));
 

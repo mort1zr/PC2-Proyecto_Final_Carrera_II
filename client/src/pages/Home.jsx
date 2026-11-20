@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../auth.jsx';
 
 const ACTIONS = {
+  admin: [{ to: '/moderacion', title: 'Moderación', text: 'Revisa y desactiva publicaciones o puntos inapropiados.' }],
   generator: [
     { to: '/historial', title: 'Historial de entregas', text: 'Mira cuánto has reciclado por material.' },
     { to: '/mis-publicaciones', title: 'Mis publicaciones', text: 'Publica tus residuos reciclables y sigue su estado.' },
